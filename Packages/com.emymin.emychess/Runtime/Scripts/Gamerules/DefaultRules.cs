@@ -1,4 +1,4 @@
-﻿
+
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
@@ -77,7 +77,7 @@ namespace Emychess.GameRules
             int newindex = index;
             if (x < 0 || x > 7 || y < 0 || y > 7) { return newindex; }
             if (index < legalMoves.Length)
-            {     
+            {
                 legalMoves[index] = new Vector2(x, y);
                 if(index < legalMoves.Length - 1)
                 {
@@ -116,13 +116,13 @@ namespace Emychess.GameRules
                     if (!hasMoved)
                     {
                         if (board.GetPiece(x, y + dir* 2) == null) {
-                            index = AppendMove(index, x, y + dir * 2, legalMoves); 
+                            index = AppendMove(index, x, y + dir * 2, legalMoves);
                         }
                     }
                 }
                 Piece pieceCaptureLeft = board.GetGridPiece(x - 1, y + dir,grid);
                 Piece pieceCaptureRight = board.GetGridPiece(x + 1, y + dir,grid);
-                
+
                 if (pieceCaptureLeft != null && pieceCaptureLeft.white!=white)
                 {
                     index = AppendMove(index, x - 1, y + dir, legalMoves);
@@ -153,12 +153,12 @@ namespace Emychess.GameRules
             }
             else if (type == "king")
             {
-                for(int i = -1; i < 2; i++)
+                for (int i = -1; i < 2; i++)
                 {
-                    for(int j = -1; j < 2; j++)
+                    for (int j = -1; j < 2; j++)
                     {
-                        Piece squarepiece = board.GetGridPiece(x + i, y + j,grid);
-                        if(squarepiece==null||(squarepiece!=null && squarepiece.white != white))
+                        Piece squarepiece = board.GetGridPiece(x + i, y + j, grid);
+                        if (squarepiece == null || (squarepiece != null && squarepiece.white != white))
                         {
                             index = AppendMove(index, x + i, y + j, legalMoves);
                         }
@@ -166,27 +166,32 @@ namespace Emychess.GameRules
                 }
                 if (!hasMoved)
                 {
-                    if (true )//|| !isKingInCheck(movedPiece.GetVec(), board.grid, board, board.PawnThatDidADoublePushLastRound, white)) //TODO very WEIRD stuff happens if I check if the king is in check here (which is necessary because castling is not allowed when the king is in check)
+                    if (!isKingInCheck(movedPiece.GetVec(), grid, board, PawnThatDidADoublePushLastRound, white))
                     {
-                        foreach(int rookColumn in rookColumns)
+                        foreach (int rookColumn in rookColumns)
                         {
-                            Piece startRook = board.GetGridPiece(rookColumn, y,grid);
-                            if (startRook!=null && startRook.type == "rook" && !startRook.hasMoved && startRook.white == white)
+                            Piece startRook = board.GetGridPiece(rookColumn, y, grid);
+                            if (startRook != null && startRook.type == "rook" && !startRook.hasMoved && startRook.white == white)
                             {
                                 bool free = true;
-                                for(int i = Mathf.Min(x, rookColumn) + 1; i < Mathf.Max(x, rookColumn); i++)
+                                for (int i = Mathf.Min(x, rookColumn) + 1; i < Mathf.Max(x, rookColumn); i++)
                                 {
-                                    if (board.GetGridPiece(i, y,grid) != null) free = false;
+                                    if (board.GetGridPiece(i, y, grid) != null) free = false;
                                 }
                                 if (free)
                                 {
                                     int dir = Mathf.Min(x, rookColumn) == x ? 1 : -1;
-                                    index = AppendMove(index, x + dir * 2, y, legalMoves);
+                                    Vector2 throughSquare = new Vector2(x + dir, y);
+                                    Vector2 endSquare = new Vector2(x + dir * 2, y);
+                                    if (!IsSquareUnderAttack(throughSquare, white, grid, board, PawnThatDidADoublePushLastRound) &&
+                                        !IsSquareUnderAttack(endSquare, white, grid, board, PawnThatDidADoublePushLastRound))
+                                    {
+                                        index = AppendMove(index, x + dir * 2, y, legalMoves);
+                                    }
                                 }
                             }
                         }
                     }
-                    
                 }
             }
             else if (type == "rook" || type == "bishop" || type == "queen")
@@ -304,6 +309,38 @@ namespace Emychess.GameRules
         }
 
         /// <summary>
+        /// Check if a square is under attack
+        /// </summary>
+        /// <param name="square"></param>
+        /// <param name="white"></param>
+        /// <param name="grid"></param>
+        /// <param name="board"></param>
+        /// <param name="PawnThatDidADoublePush"></param>
+        /// <returns></returns>
+        private bool IsSquareUnderAttack(Vector2 square, bool white, Piece[] grid, Board board, Piece PawnThatDidADoublePush)
+        {
+            foreach (Piece opponentPiece in board.GetAllPieces())
+            {
+                if (opponentPiece.white != white)
+                {
+                    if (isCaptureFeasible(opponentPiece.GetVec(), square, opponentPiece.type))
+                    {
+                        if (board.GetGridPiece(opponentPiece.x, opponentPiece.y, grid) == opponentPiece) // not captured in the test move
+                        {
+                            Vector2[] opponentPseudoLegalMoves = GetAllPseudoLegalMovesGrid(opponentPiece, grid, PawnThatDidADoublePush, board);
+                            foreach (Vector2 opponentPseudoLegalMove in opponentPseudoLegalMoves)
+                            {
+                                if (opponentPseudoLegalMove == legalMovesEndMarker) { break; }
+                                if (opponentPseudoLegalMove == square) { return true; }
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Get all legal moves for a piece
         /// </summary>
         /// <param name="movedPiece"></param>
@@ -321,14 +358,14 @@ namespace Emychess.GameRules
                 Piece[] testGrid=new Piece[currentGrid.Length];
                 for(int i=0;i<pseudoLegalMoves.Length;i++)
                 {
-                
+
                     Vector2 pseudoLegalMove = pseudoLegalMoves[i];
-                    
+
                     if (pseudoLegalMove == legalMovesEndMarker) { break; } else
                     {
-                        
+
                         Array.Copy(currentGrid, testGrid, currentGrid.Length);
-                        
+
                         board.MoveGridPieceVec(piecePos, pseudoLegalMove, testGrid);
                         Piece PawnThatDidADoublePush=null;
                         if (movedPiece.type == "pawn" && (Mathf.Abs(movedPiece.x - (int)pseudoLegalMove.x) > 1)){
@@ -336,20 +373,20 @@ namespace Emychess.GameRules
                         }
                         Vector2 threatenedPos = movedPiece.type != "king" ? kingPos : pseudoLegalMove;
                         if (isKingInCheck(threatenedPos, testGrid, board, PawnThatDidADoublePush, movedPiece.white)) { pseudoLegalMoves[i] = legalMovesIgnoreMarker; }
-                    
+
                     }
                 }
 
             }
             return pseudoLegalMoves;
-            
+
         }
 
         /// <summary>
         /// Gets the result of moving a piece to the specified position, as well as performing capture, en passant or castling
         /// </summary>
         /// <remarks>
-        /// Will recalculate legal moves, if you already have a list of legal moves 
+        /// Will recalculate legal moves, if you already have a list of legal moves
         /// (for example during <see cref="Piece.PieceDropped(int, int)"/>) use <see cref="MoveLegalCheck(Piece, int, int, Board, Vector2[])"/> to pass them
         /// </remarks>
         /// <param name="movedPiece"></param>
@@ -373,7 +410,7 @@ namespace Emychess.GameRules
                 Vector2[] legalMoves = GetAllLegalMoves(movedPiece, board);
                 return MoveLegalCheck(movedPiece, x, y, board, legalMoves);
             }
-            
+
         }
 
         /// <summary>
@@ -425,7 +462,7 @@ namespace Emychess.GameRules
                 }
                 movedPiece.hasMoved = true;
                 movedPiece._SetPosition(x, y);
-                
+
                 return result;
             }
             else
@@ -433,7 +470,7 @@ namespace Emychess.GameRules
                 movedPiece._SetPosition(movedPiece.x, movedPiece.y);
                 return 0;
             }
-            
+
         }
         /// <summary>
         /// Resets the board with all pieces in the correct starting positions
