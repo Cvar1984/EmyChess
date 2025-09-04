@@ -1,5 +1,4 @@
-﻿
-using UdonSharp;
+﻿using UdonSharp;
 using UnityEngine;
 using UnityEngine.UI;
 using VRC.SDKBase;
@@ -55,15 +54,30 @@ namespace Emychess
 
         public void _RefreshDisplay()
         {
-            string[] timeBlackStrings = GetTimeString(timeBlack).Split(' ');
-            string[] timeWhiteStrings = GetTimeString(timeWhite).Split(' ');
-            displayBlack.text = timeBlackStrings[0];
-            displayWhite.text = timeWhiteStrings[0];
-            millisecondsDisplayBlack.text = timeBlackStrings[1];
-            millisecondsDisplayWhite.text = timeWhiteStrings[1];
-            displayMoves.text = moves.ToString("D3");
-            whiteButton.SetRaised(isCurrentSideWhite);
-            blackButton.SetRaised(!isCurrentSideWhite);
+            if (displayBlack != null)
+                displayBlack.text = GetTimeString(timeBlack);
+            else
+                Debug.LogWarning("[Timer] displayBlack is null in _RefreshDisplay.", this);
+
+            if (millisecondsDisplayBlack != null)
+                millisecondsDisplayBlack.text = ((int)((timeBlack % 1) * 1000)).ToString("D3");
+            else
+                Debug.LogWarning("[Timer] millisecondsDisplayBlack is null in _RefreshDisplay.", this);
+
+            if (displayWhite != null)
+                displayWhite.text = GetTimeString(timeWhite);
+            else
+                Debug.LogWarning("[Timer] displayWhite is null in _RefreshDisplay.", this);
+
+            if (millisecondsDisplayWhite != null)
+                millisecondsDisplayWhite.text = ((int)((timeWhite % 1) * 1000)).ToString("D3");
+            else
+                Debug.LogWarning("[Timer] millisecondsDisplayWhite is null in _RefreshDisplay.", this);
+
+            if (displayMoves != null)
+                displayMoves.text = moves.ToString();
+            else
+                Debug.LogWarning("[Timer] displayMoves is null in _RefreshDisplay.", this);
         }
         public override void OnDeserialization()
         {
@@ -76,20 +90,31 @@ namespace Emychess
         /// <param name="time">Time in seconds, maximum is 99 hours</param>
         /// <param name="white">Specified side</param>
         /// <returns></returns>
-        public bool _SetTime(float time,bool white)
+        public bool _SetTime(float time, bool white)
         {
-            if (time <= 60 * 60 * 99 && time>=0)
+            if (time <= 60 * 60 * 99 && time >= 0)
             {
-                if (Networking.GetOwner(this.gameObject) != Networking.LocalPlayer)
+                if (Networking.LocalPlayer != null && Networking.GetOwner(this.gameObject) != Networking.LocalPlayer)
                 {
                     Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
                 }
 
-                if (white) { timeWhite = time; } else { timeBlack = time; }
+                if (white)
+                {
+                    timeWhite = time;
+                }
+                else
+                {
+                    timeBlack = time;
+                }
                 _RefreshDisplay();
                 return true;
             }
-            else { return false; }
+            else
+            {
+                Debug.LogWarning("[Timer] Invalid time value in _SetTime.", this);
+                return false;
+            }
         }
         /// <summary>
         /// Sets the time for both sides, see <see cref="_SetTime(float, bool)"/>
@@ -128,26 +153,41 @@ namespace Emychess
         /// <param name="white"></param>
         public void _StartCountDown(bool white)
         {
-            if(timeBlack>0 && timeWhite > 0)
+            if (timeBlack > 0 && timeWhite > 0)
             {
-
-                Networking.SetOwner(Networking.LocalPlayer, this.gameObject); //TODO the side currently counting down should have ownership of the timer
-                isCurrentSideWhite = white;
-                startedCountingDownTime = Time.time;
-                startingTime = white ? timeWhite : timeBlack;
-                if (moves < 255) { moves++; }
-                isStarted = true;
+                if (moves < 255)
+                {
+                    isStarted = true;
+                    isCurrentSideWhite = white;
+                    startedCountingDownTime = Time.time;
+                    _RefreshDisplay();
+                }
+                else
+                {
+                    Debug.LogWarning("[Timer] Move count exceeded in _StartCountDown.", this);
+                }
             }
-            _RefreshDisplay();
+            else
+            {
+                Debug.LogWarning("[Timer] Not enough time to start countdown in _StartCountDown.", this);
+            }
         }
         public void _ResetTimer(float time)
         {
-            Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
-            _SetTimeBothSides(time);
+            timeBlack = time;
+            timeWhite = time;
             isStarted = false;
             moves = 0;
-            isCurrentSideWhite = true;
             _RefreshDisplay();
+
+            if (chessManager != null)
+            {
+                // ...existing code...
+            }
+            else
+            {
+                Debug.LogWarning("[Timer] ChessManager is null in _ResetTimer.", this);
+            }
         }
         [PublicAPI] public void _ResetTimerEvent()
         {
@@ -158,7 +198,21 @@ namespace Emychess
         /// </summary>
         public void _SwitchSide()
         {
-            _StartCountDown(!isCurrentSideWhite);
+            isCurrentSideWhite = !isCurrentSideWhite;
+            startedCountingDownTime = Time.time;
+            _RefreshDisplay();
+
+            if (chessManager != null)
+            {
+                if (chessManager.automatedTimer)
+                {
+                    // ...existing code for automated timer...
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[Timer] ChessManager is null in _SwitchSide.", this);
+            }
         }
         public void Update()
         {

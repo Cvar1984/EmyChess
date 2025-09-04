@@ -1,5 +1,4 @@
-﻿
-using UdonSharp;
+﻿using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
@@ -64,16 +63,22 @@ namespace Emychess
         /// <returns></returns>
         public VRCObjectPool GetPool(string type)
         {
-            VRCObjectPool foundPool = null;
-            foreach (VRCObjectPool pool in piece_pools)
+            if (piece_pools == null)
             {
-                if (pool.name == type)
+                Debug.LogWarning("[Board] piece_pools is null in GetPool.", this);
+                return null;
+            }
+            foreach (var pool in piece_pools)
+            {
+                if (pool != null && pool.gameObject.name.Contains(type))
                 {
-                    foundPool = pool;
+                    return pool;
                 }
             }
-            return foundPool;
+            Debug.LogWarning("[Board] No pool found for type: " + type, this);
+            return null;
         }
+
         /// <summary>
         /// Get how many pieces of a specific type can still be spawned
         /// </summary>
@@ -82,30 +87,56 @@ namespace Emychess
         public int GetPiecesAvailableCount(string type)
         {
             VRCObjectPool pool = GetPool(type);
-            int count = 0;
-            if (pool == null) { Debug.LogError("[ChessManager] "+"Couldn't find pool for type " + type); }
+            if (pool == null)
+            {
+                Debug.LogWarning("[Board] Pool is null in GetPiecesAvailableCount for type: " + type, this);
+                return 0;
+            }
             else
             {
-                foreach(GameObject obj in pool.Pool)
-                {
-                    if (obj.activeSelf == false) count++;
-                }
+                return pool.GetAvailableCount();
             }
-            return count;
         }
         public Piece _SpawnPiece(int x,int y,bool white,string type)
         {
             VRCObjectPool pool = GetPool(type);
-            Networking.SetOwner(Networking.LocalPlayer, pool.gameObject);
+            if (pool == null)
+            {
+                Debug.LogWarning("[Board] Pool is null in _SpawnPiece for type: " + type, this);
+                return null;
+            }
+            if (Networking.LocalPlayer != null)
+            {
+                Networking.SetOwner(Networking.LocalPlayer, pool.gameObject);
+            }
             GameObject spawnedPiece = pool.TryToSpawn();
             if (spawnedPiece != null)
             {
-                Networking.SetOwner(Networking.LocalPlayer, spawnedPiece);
-                Piece piece = (Piece)(UdonSharpBehaviour)spawnedPiece.GetComponent(typeof(UdonBehaviour));
-                piece._Setup(x, y, white);
-                return piece;
+                if (Networking.LocalPlayer != null)
+                {
+                    Networking.SetOwner(Networking.LocalPlayer, spawnedPiece);
+                }
+                var udonBehaviour = spawnedPiece.GetComponent(typeof(UdonBehaviour));
+                if (udonBehaviour == null)
+                {
+                    Debug.LogWarning("[Board] UdonBehaviour missing on spawned piece.", this);
+                    return null;
+                }
+                Piece piece = udonBehaviour as Piece;
+                if (piece != null)
+                {
+                    piece._Setup(x, y, white);
+                    return piece;
+                }
+                else
+                {
+                    Debug.LogWarning("[Board] Spawned object is not a Piece.", this);
+                }
             }
-            
+            else
+            {
+                Debug.LogWarning("[Board] Failed to spawn piece from pool.", this);
+            }
             return null;
             
         }
@@ -271,18 +302,29 @@ namespace Emychess
         /// <returns></returns>
         public Piece[] GetAllPieces()
         {
-            Piece[] pieces = new Piece[GetPieceCount()];
-            int pieceIndex = 0;
-            for(int i = 0; i < pieces_parent.childCount; i++)
+            if (pieces_parent == null)
             {
-                GameObject child = pieces_parent.GetChild(i).gameObject;
-                if (child.activeSelf == true)
+                Debug.LogWarning("[Board] pieces_parent is null in GetAllPieces.", this);
+                return new Piece[0];
+            }
+            var pieces = new System.Collections.Generic.List<Piece>();
+            for (int i = 0; i < pieces_parent.childCount; i++)
+            {
+                var child = pieces_parent.GetChild(i);
+                if (child != null)
                 {
-                    pieces[pieceIndex] = (Piece)(UdonSharpBehaviour)child.GetComponent(typeof(UdonBehaviour));
-                    pieceIndex++;
+                    var udonBehaviour = child.GetComponent(typeof(UdonBehaviour));
+                    if (udonBehaviour != null)
+                    {
+                        Piece piece = udonBehaviour as Piece;
+                        if (piece != null)
+                        {
+                            pieces.Add(piece);
+                        }
+                    }
                 }
             }
-            return pieces;
+            return pieces.ToArray();
         }
 
         /// <summary>
@@ -430,7 +472,14 @@ namespace Emychess
 
         private void _RefreshIndicators()
         {
-            board_renderer.material.SetFloatArray("_Indicators", IndicatorArray);
+            if (board_renderer != null && IndicatorArray != null)
+            {
+                board_renderer.material.SetFloatArray("_Indicators", IndicatorArray);
+            }
+            else
+            {
+                Debug.LogWarning("[Board] board_renderer or IndicatorArray is null in _RefreshIndicators.", this);
+            }
         }
         /// <summary>
         /// Set an indicator on the board

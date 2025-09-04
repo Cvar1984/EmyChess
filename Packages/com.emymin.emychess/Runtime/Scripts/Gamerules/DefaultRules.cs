@@ -1,4 +1,3 @@
-
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
@@ -76,12 +75,17 @@ namespace Emychess.GameRules
         {
             int newindex = index;
             if (x < 0 || x > 7 || y < 0 || y > 7) { return newindex; }
+            if (legalMoves == null)
+            {
+                Debug.LogWarning("[DefaultRules] legalMoves array is null in AppendMove.");
+                return newindex;
+            }
             if (index < legalMoves.Length)
             {
                 legalMoves[index] = new Vector2(x, y);
                 if(index < legalMoves.Length - 1)
                 {
-                    legalMoves[index + 1] = legalMovesEndMarker;//used to mark the end of the """"list""""
+                    legalMoves[index + 1] = legalMovesEndMarker;
                     newindex++;
                 }
             }
@@ -99,7 +103,12 @@ namespace Emychess.GameRules
         /// <returns>List of pseudo-legal moves</returns>
         public Vector2[] GetAllPseudoLegalMovesGrid(Piece movedPiece,Piece[] grid,Piece PawnThatDidADoublePushLastRound,Board board)
         {
-            Vector2[] legalMoves = new Vector2[64]; // SADLY still no lists, so gotta do this the cursed way
+            if (movedPiece == null || board == null)
+            {
+                Debug.LogWarning("[DefaultRules] movedPiece or board is null in GetAllPseudoLegalMovesGrid.");
+                return new Vector2[0];
+            }
+            Vector2[] legalMoves = new Vector2[64];
             int index = 0;
             legalMoves[index] = legalMovesEndMarker;
             string type = movedPiece.type;
@@ -243,6 +252,11 @@ namespace Emychess.GameRules
         /// <returns></returns>
         public Vector2[] GetAllPseudoLegalMoves(Piece piece,Board board)
         {
+            if (piece == null || board == null)
+            {
+                Debug.LogWarning("[DefaultRules] piece or board is null in GetAllPseudoLegalMoves.");
+                return new Vector2[0];
+            }
             return GetAllPseudoLegalMovesGrid(piece, board.grid, board.PawnThatDidADoublePushLastRound,board);
         }
 
@@ -255,6 +269,11 @@ namespace Emychess.GameRules
         /// <returns></returns>
         public bool isCaptureFeasible(Vector2 opponentPosition,Vector2 threatenedPosition,string type)
         {
+            if (type == null)
+            {
+                Debug.LogWarning("[DefaultRules] type is null in isCaptureFeasible.");
+                return false;
+            }
             if (type == "rook") return (opponentPosition.x == threatenedPosition.x | opponentPosition.y == threatenedPosition.y);
             else if (type == "pawn") return (Mathf.Abs(opponentPosition.x - threatenedPosition.x) == 1 && Mathf.Abs(opponentPosition.y - threatenedPosition.y) == 1);
             else if (type == "knight") return (Mathf.Abs(opponentPosition.x - threatenedPosition.x) < 3 && Mathf.Abs(opponentPosition.y - threatenedPosition.y) < 3);
@@ -275,15 +294,25 @@ namespace Emychess.GameRules
         /// <returns></returns>
         public bool isKingInCheck(Vector2 threatenedPos,Piece[] grid,Board board,Piece PawnThatDidADoublePush,bool white)
         {
+            if (grid == null)
+            {
+                Debug.LogWarning("[DefaultRules] grid is null in isKingInCheck. Might be first turn.");
+                return false;
+            }
+            if (board == null)
+            {
+                Debug.LogWarning("[DefaultRules] board is null in isKingInCheck.");
+                return false;
+            }
             bool isKingChecked = false;
-            if (grid == null) { Debug.LogWarning("Empty grid, might be first turn");return false; }
             foreach (Piece opponentPiece in board.GetAllPieces())
             {
+                if (opponentPiece == null) continue;
                 if (opponentPiece.white != white)
                 {
                     if (isCaptureFeasible(opponentPiece.GetVec(), threatenedPos, opponentPiece.type))
                     {
-                        if (board.GetGridPiece(opponentPiece.x, opponentPiece.y, grid) == opponentPiece) //not captured in the test move
+                        if (board.GetGridPiece(opponentPiece.x, opponentPiece.y, grid) == opponentPiece)
                         {
                             Vector2[] opponentPseudoLegalMoves = GetAllPseudoLegalMovesGrid(opponentPiece, grid, PawnThatDidADoublePush, board);
                             foreach (Vector2 opponentPseudoLegalMove in opponentPseudoLegalMoves)
@@ -294,9 +323,7 @@ namespace Emychess.GameRules
                                     if (opponentPseudoLegalMove == threatenedPos)
                                     {
                                         isKingChecked = true;
-                                        //Debug.Log("Oh no, the king which is at x:" + threatenedPos.x + " y:" + threatenedPos.y + " is in check bc the " + opponentPiece.type + " at " + opponentPiece.x + " " + opponentPiece.y + " could capture it at " + opponentPseudoLegalMove.x + " " + opponentPseudoLegalMove.y);
                                         break;
-
                                     }
                                 }
                             }
@@ -319,13 +346,19 @@ namespace Emychess.GameRules
         /// <returns></returns>
         private bool IsSquareUnderAttack(Vector2 square, bool white, Piece[] grid, Board board, Piece PawnThatDidADoublePush)
         {
+            if (board == null)
+            {
+                Debug.LogWarning("[DefaultRules] board is null in IsSquareUnderAttack.");
+                return false;
+            }
             foreach (Piece opponentPiece in board.GetAllPieces())
             {
+                if (opponentPiece == null) continue;
                 if (opponentPiece.white != white)
                 {
                     if (isCaptureFeasible(opponentPiece.GetVec(), square, opponentPiece.type))
                     {
-                        if (board.GetGridPiece(opponentPiece.x, opponentPiece.y, grid) == opponentPiece) // not captured in the test move
+                        if (board.GetGridPiece(opponentPiece.x, opponentPiece.y, grid) == opponentPiece)
                         {
                             Vector2[] opponentPseudoLegalMoves = GetAllPseudoLegalMovesGrid(opponentPiece, grid, PawnThatDidADoublePush, board);
                             foreach (Vector2 opponentPseudoLegalMove in opponentPseudoLegalMoves)
@@ -346,8 +379,13 @@ namespace Emychess.GameRules
         /// <param name="movedPiece"></param>
         /// <param name="board"></param>
         /// <returns></returns>
-        public Vector2[] GetAllLegalMoves(Piece movedPiece, Board board) //TODO needs some ACTUAL testing (Perft function)
+        public Vector2[] GetAllLegalMoves(Piece movedPiece, Board board)
         {
+            if (movedPiece == null || board == null)
+            {
+                Debug.LogWarning("[DefaultRules] movedPiece or board is null in GetAllLegalMoves.");
+                return new Vector2[0];
+            }
             Vector2[] pseudoLegalMoves = GetAllPseudoLegalMoves(movedPiece, board);
             Vector2 piecePos = movedPiece.GetVec();
             Piece king = movedPiece.white ? board.whiteKing : board.blackKing;
@@ -355,7 +393,12 @@ namespace Emychess.GameRules
             {
                 Vector2 kingPos = king.GetVec();
                 Piece[] currentGrid = board.grid;
-                Piece[] testGrid=new Piece[currentGrid.Length];
+                if (currentGrid == null)
+                {
+                    Debug.LogWarning("[DefaultRules] board.grid is null in GetAllLegalMoves.");
+                    return pseudoLegalMoves;
+                }
+                Piece[] testGrid = new Piece[currentGrid.Length];
                 for(int i=0;i<pseudoLegalMoves.Length;i++)
                 {
 
@@ -396,6 +439,16 @@ namespace Emychess.GameRules
         /// <returns>0 if the move is not allowed, 1 if the move was successful, 2 if the move resulted in a capture</returns>
         public int Move(Piece movedPiece,int x,int y,Board board)
         {
+            if (board == null)
+            {
+                Debug.LogWarning("[DefaultRules] board is null in Move.");
+                return 0;
+            }
+            if (movedPiece == null)
+            {
+                Debug.LogWarning("[DefaultRules] movedPiece is null in Move.");
+                return 0;
+            }
             int result = 0;
             if (anarchy)
             {
@@ -424,6 +477,21 @@ namespace Emychess.GameRules
         /// <returns>0 if the move is not allowed, 1 if the move was successful, 2 if the move resulted in a capture</returns>
         public int MoveLegalCheck(Piece movedPiece,int x,int y, Board board,Vector2[] legalMoves)
         {
+            if (board == null)
+            {
+                Debug.LogWarning("[DefaultRules] board is null in MoveLegalCheck.");
+                return 0;
+            }
+            if (movedPiece == null)
+            {
+                Debug.LogWarning("[DefaultRules] movedPiece is null in MoveLegalCheck.");
+                return 0;
+            }
+            if (legalMoves == null)
+            {
+                Debug.LogWarning("[DefaultRules] legalMoves array is null in MoveLegalCheck.");
+                return 0;
+            }
             int result = 0;
             Piece targetPiece = board.GetPiece(x,y);
             Vector2 move = new Vector2(x, y);
@@ -439,7 +507,7 @@ namespace Emychess.GameRules
             {
                 if (targetPiece != null) { targetPiece._Capture(); result = 2; } else { result = 1; }
 
-                if (movedPiece.type == "pawn" && movedPiece.x != x && board.GetPiece(x, y) == null)//EN PASSANT
+                if (movedPiece.type == "pawn" && movedPiece.x != x && board.GetPiece(x, y) == null && board.PawnThatDidADoublePushLastRound != null)//EN PASSANT
                 {
                     board.PawnThatDidADoublePushLastRound._Capture();
                     result = 2;
@@ -449,12 +517,18 @@ namespace Emychess.GameRules
                 {
                     int dir = Mathf.Min(x, movedPiece.x) == x ? -1 : 1;
                     Piece rookCastle = dir == 1 ? board.GetPiece(7, y) : board.GetPiece(0, y);
-                    rookCastle._SetPosition(x + (dir * -1), y);
-
+                    if (rookCastle != null)
+                    {
+                        rookCastle._SetPosition(x + (dir * -1), y);
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[DefaultRules] rookCastle is null during castling in MoveLegalCheck.");
+                    }
                 }
                 if (movedPiece.type == "pawn" && Mathf.Abs(y - movedPiece.y) == 2)
                 {
-                    board.PawnThatDidADoublePushLastRound = movedPiece; //NOTICE, to have it be synced I also do the same check in the Piece refresh function (won't be synced for those who join right after this move, but it's fine)
+                    board.PawnThatDidADoublePushLastRound = movedPiece;
                 }
                 else
                 {
@@ -478,6 +552,11 @@ namespace Emychess.GameRules
         /// <param name="board"></param>
         public void ResetBoard(Board board)
         {
+            if (board == null)
+            {
+                Debug.LogWarning("[DefaultRules] board is null in ResetBoard.");
+                return;
+            }
             board.ReadFENString("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
         }
         /// <summary>
@@ -486,7 +565,14 @@ namespace Emychess.GameRules
         /// <param name="enabled"></param>
         public void SetAnarchy(bool enabled)
         {
-            Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
+            if (Networking.LocalPlayer != null)
+            {
+                Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
+            }
+            else
+            {
+                Debug.LogWarning("[DefaultRules] Networking.LocalPlayer is null in SetAnarchy.");
+            }
             anarchy = enabled;
             RequestSerialization();
         }

@@ -1,5 +1,4 @@
-﻿
-using UdonSharp;
+﻿using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
@@ -58,7 +57,7 @@ namespace Emychess
 
         public void _DebugState()
         {
-            Debug.Log("[ChessManager] "+"State: " + _state +" Properties "+ x + " " + y + " " + white + " " + hasMoved+" "+type,this);
+            Debug.Log("[ChessManager] " + "State: " + _state + " Properties " + x + " " + y + " " + white + " " + hasMoved + " " + type, this);
         }
 
         #endregion
@@ -87,13 +86,43 @@ namespace Emychess
 
         public void _UpdateState()
         {
-            if (transform.parent != board.pieces_parent) { transform.SetParent(board.pieces_parent); }
-            if (pickup == null) { pickup = (VRC_Pickup)GetComponent(typeof(VRC_Pickup)); }
-            if (board.chessManager.inProgress)
+            if (board != null && board.pieces_parent != null)
             {
-                if(Networking.LocalPlayer==board.chessManager.GetPlayer(board.chessManager.currentSide) && board.chessManager.currentSide==white)
+                if (transform.parent != board.pieces_parent)
                 {
-                    SetGrabbable(true);
+                    transform.SetParent(board.pieces_parent);
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[Piece] Board or pieces_parent is null in _UpdateState.", this);
+                return;
+            }
+
+            if (pickup == null)
+            {
+                pickup = GetComponent<VRC_Pickup>();
+                if (pickup == null)
+                {
+                    Debug.LogWarning("[Piece] VRC_Pickup component missing!", this);
+                    return;
+                }
+            }
+
+            if (board.chessManager != null)
+            {
+                if (board.chessManager.inProgress)
+                {
+                    var currentPlayer = board.chessManager.GetPlayer(board.chessManager.currentSide);
+                    if (Networking.LocalPlayer != null && currentPlayer != null &&
+                        Networking.LocalPlayer == currentPlayer && board.chessManager.currentSide == white)
+                    {
+                        SetGrabbable(true);
+                    }
+                    else
+                    {
+                        SetGrabbable(false);
+                    }
                 }
                 else
                 {
@@ -102,33 +131,41 @@ namespace Emychess
             }
             else
             {
-                SetGrabbable(false);
+                Debug.LogWarning("[Piece] ChessManager is null in _UpdateState.", this);
+                return;
             }
 
             if (type == "pawn")
             {
-                if (Mathf.Abs(previousY - y) == 2) //NOTE, for new joiners this is gonna be incorrect, but it's fine
+                if (Mathf.Abs(previousY - y) == 2)
                 {
                     board.PawnThatDidADoublePushLastRound = this;
                 }
             }
 
-            //set the correct transform for the piece on the board
-            transform.localPosition = new Vector3(-(x + .5f), 0, -(y + .5f));
-            transform.localRotation = white ? Quaternion.identity : Quaternion.identity * Quaternion.Euler(0, 180f, 0);
-            transform.localScale = Vector3.one;
-            previousX = x;
-            previousY = y;
+            if (pieceRenderer == null)
+            {
+                pieceRenderer = GetComponent<Renderer>();
+                if (pieceRenderer == null)
+                {
+                    Debug.LogWarning("[Piece] Renderer component missing!", this);
+                }
+            }
 
-            if (pieceRenderer == null) { pieceRenderer = GetComponent<Renderer>(); }
-            pieceRenderer.material = white ? board.whitePieceMaterial : board.blackPieceMaterial;
-
-            board._RegenerateGrid();
-            board.chessManager.RefreshPiecePlacerPieceCount();
-
-            if ((board.whiteKing == null || !board.whiteKing.gameObject.activeInHierarchy) && type == "king" && white) { board.whiteKing = this; }
-            if ((board.blackKing == null || !board.blackKing.gameObject.activeInHierarchy) && type == "king" && !white) { board.blackKing = this; }
-
+            if (type == "king" && white)
+            {
+                if (board.whiteKing == null || !board.whiteKing.gameObject.activeInHierarchy)
+                {
+                    Debug.LogWarning("[Piece] White king reference is null or inactive.", this);
+                }
+            }
+            if (type == "king" && !white)
+            {
+                if (board.blackKing == null || !board.blackKing.gameObject.activeInHierarchy)
+                {
+                    Debug.LogWarning("[Piece] Black king reference is null or inactive.", this);
+                }
+            }
         }
         public override void OnDeserialization() //TODO late joiners sometimes can't see all pieces, some limit on manual syncing?
         {
@@ -141,22 +178,36 @@ namespace Emychess
         }
         public void _SetPosition(int posx, int posy)
         {
-            Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
-            x = (byte)Mathf.Clamp(posx, 0, 7);
-            y = (byte)Mathf.Clamp(posy, 0, 7);
-            _UpdateState();
-            RequestSerialization();
+            if (board != null)
+            {
+                Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
+                x = (byte)Mathf.Clamp(posx, 0, 7);
+                y = (byte)Mathf.Clamp(posy, 0, 7);
+                _UpdateState();
+                RequestSerialization();
+            }
+            else
+            {
+                Debug.LogWarning("[Piece] Board is null in _SetPosition.", this);
+            }
         }
         public void _Setup(int posx, int posy, bool isWhite)
         {
-            Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
-            x = (byte)Mathf.Clamp(posx, 0, 7);
-            y = (byte)Mathf.Clamp(posy, 0, 7);
-            white = isWhite;
-            hasMoved = false;
-            _UpdateState();
-            //RequestSerialization();
-            SendCustomEventDelayedFrames(nameof(_RequestSerialization), 20); //is this a bug? race condition? I honestly have no clue, but if I don't delay this, it just doesn't sync correctly when spawning a lot of pieces. EVEN FOR LATER JOINERS, HOW????
+            if (board != null)
+            {
+                Networking.SetOwner(Networking.LocalPlayer, this.gameObject);
+                x = (byte)Mathf.Clamp(posx, 0, 7);
+                y = (byte)Mathf.Clamp(posy, 0, 7);
+                white = isWhite;
+                hasMoved = false;
+                _UpdateState();
+                //RequestSerialization();
+                SendCustomEventDelayedFrames(nameof(_RequestSerialization), 20); //is this a bug? race condition? I honestly have no clue, but if I don't delay this, it just doesn't sync correctly when spawning a lot of pieces. EVEN FOR LATER JOINERS, HOW????
+            }
+            else
+            {
+                Debug.LogWarning("[Piece] Board is null in _Setup.", this);
+            }
         }
 
         /// <summary>
@@ -165,6 +216,11 @@ namespace Emychess
         /// <returns></returns>
         public int GetValue()
         {
+            if (string.IsNullOrEmpty(type))
+            {
+                Debug.LogWarning("[Piece] Type is null or empty in GetValue.", this);
+                return 0;
+            }
             if (type == "pawn") return 1;
             if (type == "bishop" || type == "knight") return 3;
             if (type == "rook") return 5;
@@ -174,17 +230,30 @@ namespace Emychess
 
         public void _Capture()
         {
-            if (pickup.IsHeld) { pickup.Drop(); }
-            _ReturnToPool();
-            board.chessManager.AddScore(GetValue(), !white);
+            if (pickup != null && pickup.IsHeld)
+            {
+                pickup.Drop();
+                _ReturnToPool();
+                board.chessManager.AddScore(GetValue(), !white);
+            }
+            else if (pickup == null)
+            {
+                Debug.LogWarning("[Piece] VRC_Pickup is null in _Capture.", this);
+            }
         }
         /// <summary>
         /// Remove piece from board and return to the VRC object pool
         /// </summary>
         public void _ReturnToPool()
         {
-            Networking.SetOwner(Networking.LocalPlayer, pool.gameObject);
-            pool.Return(this.gameObject);
+            if (pool != null)
+            {
+                pool.Return(this.gameObject);
+            }
+            else
+            {
+                Debug.LogWarning("[Piece] Object pool is null in _ReturnToPool.", this);
+            }
         }
         /// <summary>
         /// Get the piece's position as a Vec2 (vec2int is not supported in Udon yet)
@@ -199,7 +268,15 @@ namespace Emychess
         /// </summary>
         public void PieceMovedAudio()
         {
-            GetComponent<AudioSource>().PlayOneShot(board.pieceMovedClip);
+            var audioSource = GetComponent<AudioSource>();
+            if (audioSource != null && board != null && board.pieceMovedClip != null)
+            {
+                audioSource.PlayOneShot(board.pieceMovedClip);
+            }
+            else
+            {
+                Debug.LogWarning("[Piece] AudioSource, board, or pieceMovedClip is missing in PieceMovedAudio.", this);
+            }
         }
         /// <summary>
         /// Play the piece capture sound
@@ -247,7 +324,7 @@ namespace Emychess
         /// </summary>
         /// <param name="newx"></param>
         /// <param name="newy"></param>
-        public void PieceDropped(int newx,int newy)
+        public void PieceDropped(int newx, int newy)
         {
             int moveResult = 0;
             if (board.currentRules.anarchy) { moveResult = board.currentRules.Move(this, newx, newy, board); }
@@ -293,7 +370,8 @@ namespace Emychess
                 float movey = transform.localPosition.z * -1f - .5f;
                 if (board.currentRules.anarchy) //TODO maybe have pieces turn red when they reach deletion distance, to make it clearer
                 {
-                    if (movex<-3||movex>11||movey<-3||movey>11){
+                    if (movex < -3 || movex > 11 || movey < -3 || movey > 11)
+                    {
                         _Capture();
                         return;
                     }
@@ -301,7 +379,7 @@ namespace Emychess
                 int newx = Mathf.RoundToInt(Mathf.Clamp(movex, 0, 7));
                 int newy = Mathf.RoundToInt(Mathf.Clamp(movey, 0, 7));
                 PieceDropped(newx, newy);
-                
+
             }
 
         }
